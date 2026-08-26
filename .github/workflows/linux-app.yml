@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - ci/linux-app-*
-    tags:
-      - '*'
 
 jobs:
   linux-app-binary:

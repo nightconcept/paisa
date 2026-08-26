@@ -1,10 +1,13 @@
 package ledger
 
 import (
+	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/ananthakumaran/paisa/internal/model/price"
 	"github.com/ananthakumaran/paisa/internal/utils"
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -109,4 +112,60 @@ func TestParseAmount(t *testing.T) {
 	commodity, amount, _ = parseAmount("100E-8    BTC")
 	assert.Equal(t, "BTC", commodity)
 	assert.Equal(t, 1e-06, amount.InexactFloat64())
+}
+
+func TestBuildHLedgerPostingsCosts(t *testing.T) {
+	date := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
+	pricesTree := buildPricesTree([]price.Price{{
+		Date:          date,
+		CommodityName: "USD",
+		Value:         decimal.NewFromInt(1),
+	}})
+
+	var transaction HLedgerTransaction
+	err := json.Unmarshal([]byte(`{
+		"tdescription": "401(k) contribution",
+		"tindex": 1,
+		"tstatus": "Cleared",
+		"ttags": [["_generated-transaction", ""]],
+		"tsourcepos": [{"sourceLine": 1}, {"sourceLine": 2}]
+	}`), &transaction)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name string
+		json string
+	}{
+		{
+			name: "legacy total price",
+			json: `{"paccount":"assets:401k","pamount":[{"acommodity":"401K","aquantity":{"floatingPoint":2},"aprice":{"tag":"TotalPrice","contents":{"acommodity":"USD","aquantity":{"floatingPoint":100}}}}]}`,
+		},
+		{
+			name: "modern total cost",
+			json: `{"paccount":"assets:401k","pamount":[{"acommodity":"401K","aquantity":{"floatingPoint":2},"acost":{"tag":"TotalCost","contents":{"acommodity":"USD","aquantity":{"floatingPoint":100}}}}]}`,
+		},
+		{
+			name: "modern unit cost",
+			json: `{"paccount":"assets:401k","pamount":[{"acommodity":"401K","aquantity":{"floatingPoint":2},"acost":{"tag":"UnitCost","contents":{"acommodity":"USD","aquantity":{"floatingPoint":50}}}}]}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var hledgerPosting HLedgerPosting
+			if err := json.Unmarshal([]byte(tt.json), &hledgerPosting); err != nil {
+				t.Fatal(err)
+			}
+
+			postings, err := buildHLedgerPostings(hledgerPosting, transaction, pricesTree, date)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if assert.Len(t, postings, 1) {
+				assert.Equal(t, 100.0, postings[0].Amount.InexactFloat64())
+			}
+		})
+	}
 }

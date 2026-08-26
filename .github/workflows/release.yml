@@ -1,0 +1,108 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_number:
+        description: "Cut number since forking from v0.7.5 (tag becomes v0.7.5-nightconcept.<n>)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  mac-cli:
+    runs-on: macos-14
+    steps:
+    - uses: actions/checkout@v2.4.0
+    - uses: actions/setup-node@v3
+      with:
+        node-version: 24
+        cache: npm
+    - uses: actions/setup-go@v4
+      with:
+        go-version: '1.26.6'
+    - run: |
+        brew install --force --overwrite sqlite3
+        brew tap-new --no-git paisa/local
+        cp ledger.rb "$(brew --repository)/Library/Taps/paisa/homebrew-local/Formula/ledger.rb"
+        brew install --build-from-source --verbose paisa/local/ledger
+        cp "$(brew --prefix ledger)/bin/ledger" internal/binary/ledger
+        npm install
+        npm run build
+        go build
+        cp paisa paisa-cli-macos-amd64
+    - uses: actions/upload-artifact@v4
+      with:
+        name: paisa-cli-macos-amd64
+        path: paisa-cli-macos-amd64
+
+  linux-cli:
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@v2.4.0
+    - uses: cachix/install-nix-action@v22
+      with:
+        nix_path: nixpkgs=channel:nixos-24.11
+    - uses: actions/setup-node@v3
+      with:
+        node-version: 24
+        cache: npm
+    - uses: actions/setup-go@v4
+      with:
+        go-version: '1.26.6'
+    - uses: vegardit/fast-apt-mirror.sh@v1
+    - run: |
+        sudo apt-get install -y sqlite3
+        npm install
+        npm run build
+        nix-build ledger.nix
+        cp ./result/bin/ledger internal/binary/ledger
+        go build
+        cp paisa paisa-cli-linux-amd64
+    - uses: actions/upload-artifact@v4
+      with:
+        name: paisa-cli-linux-amd64
+        path: paisa-cli-linux-amd64
+
+  windows-cli:
+    runs-on: windows-2022
+    steps:
+    - uses: actions/checkout@v2.4.0
+    - uses: actions/setup-node@v3
+      with:
+        node-version: 24
+        cache: npm
+    - uses: actions/setup-go@v4
+      with:
+        go-version: '1.26.6'
+    - run: |
+        choco install sqlite
+        choco install wget
+        npm install
+        npm run build
+        wget https://github.com/FullofQuarks/Windows-Ledger-Binaries/releases/download/v3.3.2/ledger.exe
+        cp ledger.exe internal/binary/ledger
+        go build
+        cp paisa.exe paisa-cli-windows-amd64.exe
+    - uses: actions/upload-artifact@v4
+      with:
+        name: paisa-cli-windows-amd64
+        path: paisa-cli-windows-amd64.exe
+
+  release:
+    needs: [mac-cli, linux-cli, windows-cli]
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/download-artifact@v4
+      with:
+        path: dist
+        merge-multiple: true
+    - uses: softprops/action-gh-release@v1
+      with:
+        tag_name: v0.7.5-nightconcept.${{ github.event.inputs.release_number }}
+        name: v0.7.5-nightconcept.${{ github.event.inputs.release_number }}
+        target_commitish: ${{ github.sha }}
+        files: dist/*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

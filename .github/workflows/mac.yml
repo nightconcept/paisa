@@ -6,6 +6,7 @@ on:
       - ci/mac-*
     tags:
       - '*'
+  workflow_dispatch:
 
 jobs:
   mac-binary:

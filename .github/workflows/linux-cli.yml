@@ -6,6 +6,7 @@ on:
       - ci/linux-cli-*
     tags:
       - '*'
+  workflow_dispatch:
 
 jobs:
   linux-cli-binary:

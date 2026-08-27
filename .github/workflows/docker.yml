@@ -1,77 +1,33 @@
 name: Docker Image Release
+
 on:
-  push:
-    branches:
-      - ci/docker-*
+  workflow_dispatch:
+    inputs:
+      release_number:
+        description: "Cut number since forking from v0.7.5 (image tag becomes v0.7.5-nightconcept.<n>-hledger)"
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
 jobs:
-  docker:
-    name: Push Docker image to Docker Hub
+  docker-hledger:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-      - id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ananthakumaran/paisa
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/build-push-action@v5
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
-          file: ./Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-      - id: meta-hledger
-        uses: docker/metadata-action@v5
-        with:
-          images: ananthakumaran/paisa
-          flavor: |
-            latest=auto
-            prefix=
-            suffix=-hledger,onlatest=true
-      - uses: docker/build-push-action@v5
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           file: ./Dockerfile.hledger
           push: true
-          tags: ${{ steps.meta-hledger.outputs.tags }}
-          labels: ${{ steps.meta-hledger.outputs.labels }}
-      - id: meta-beancount
-        uses: docker/metadata-action@v5
-        with:
-          images: ananthakumaran/paisa
-          flavor: |
-            latest=auto
-            prefix=
-            suffix=-beancount,onlatest=true
-      - uses: docker/build-push-action@v5
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          file: ./Dockerfile.beancount
-          push: true
-          tags: ${{ steps.meta-beancount.outputs.tags }}
-          labels: ${{ steps.meta-beancount.outputs.labels }}
-      - id: meta-all
-        uses: docker/metadata-action@v5
-        with:
-          images: ananthakumaran/paisa
-          flavor: |
-            latest=auto
-            prefix=
-            suffix=-all,onlatest=true
-      - uses: docker/build-push-action@v5
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          file: ./Dockerfile.all
-          push: true
-          tags: ${{ steps.meta-all.outputs.tags }}
-          labels: ${{ steps.meta-all.outputs.labels }}
+          tags: |
+            ghcr.io/${{ github.repository }}:v0.7.5-nightconcept.${{ github.event.inputs.release_number }}-hledger
+            ghcr.io/${{ github.repository }}:latest-hledger
